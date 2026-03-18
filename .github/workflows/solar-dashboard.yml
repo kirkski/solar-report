@@ -1,0 +1,70 @@
+name: Monthly Solar Panel Report
+
+on:
+  schedule:
+    # Run at 12:00 PM UTC every day — the job checks if it's the last day of the month
+    - cron: '0 12 * * *'
+
+  # Allow manual trigger from GitHub UI (always runs, skips date check)
+  workflow_dispatch:
+
+jobs:
+  generate-and-email-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if last day of month
+        id: date_check
+        run: |
+          # If manually triggered, always run
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Manual trigger — running regardless of date"
+            exit 0
+          fi
+
+          # Check if tomorrow is the 1st (meaning today is the last day)
+          TOMORROW=$(date -d "+1 day" +%d)
+          if [ "$TOMORROW" = "01" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Today is the last day of the month — running report"
+          else
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Not the last day of the month — skipping"
+          fi
+
+      - name: Checkout repository
+        if: steps.date_check.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: steps.date_check.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run solar report
+        if: steps.date_check.outputs.skip != 'true'
+        env:
+          SOLIS_API_URL: ${{ secrets.SOLIS_API_URL }}
+          SOLIS_KEY_ID: ${{ secrets.SOLIS_KEY_ID }}
+          SOLIS_KEY_SECRET: ${{ secrets.SOLIS_KEY_SECRET }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_EXPORT_MPAN: ${{ secrets.OCTOPUS_EXPORT_MPAN }}
+          OCTOPUS_EXPORT_SERIAL: ${{ secrets.OCTOPUS_EXPORT_SERIAL }}
+          EXPORT_RATE_GBP: ${{ secrets.EXPORT_RATE_GBP }}
+          TZ_OFFSET: '0'
+        run: python python/solar_dashboard.py
+
+      - name: Upload report as artifact
+        if: steps.date_check.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: solar-report-${{ github.run_id }}
+          path: solar_report_*.html
+          retention-days: 90
