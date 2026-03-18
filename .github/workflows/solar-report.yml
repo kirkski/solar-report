@@ -56,7 +56,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EXPORT_RATE_GBP: ${{ secrets.EXPORT_RATE_GBP }}
           TZ_OFFSET: '0'
-        run: python/solis_monthly_report.py
+        run: python python/solis_monthly_report.py
 
       - name: Upload report as artifact
         if: steps.date_check.outputs.skip != 'true'
